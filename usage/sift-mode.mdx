@@ -1,0 +1,76 @@
+---
+title: 'Run the SIFT tracker for fast CPU-only map tracking'
+description: 'How to launch main_sift.py, understand startup steps, read the overlay position markers, and tune inertial navigation and SIFT matching settings.'
+---
+
+SIFT mode uses classical computer vision — Scale-Invariant Feature Transform with CLAHE contrast enhancement and FLANN-based matching — to locate your position on the game map in real time. It runs entirely on CPU, requires no GPU, and is the right choice when you want low setup friction or are on a machine without CUDA. The overlay renders a cropped view of your display map centered on your detected position, always floating on top of the game window.
+
+## Launching SIFT mode
+
+```bash
+python main_sift.py
+```
+
+On every launch, the minimap calibration selector runs first. If `config.json` already contains valid `MINIMAP` coordinates (with `top` and `left` fields), the selector still opens so you can confirm or update the capture region. Close the selector window to continue.
+
+## Startup sequence
+
+<Steps>
+  <Step title="Minimap calibration check">
+    The launcher checks `config.json` for a valid `MINIMAP` region. The selector tool opens — confirm your minimap position and close it. Config is reloaded automatically before tracking begins.
+  </Step>
+  <Step title="Load maps">
+    The logic map (`LOGIC_MAP_PATH`, default `big_map.png`) and display map (`DISPLAY_MAP_PATH`, default `big_map-1.png`) are loaded from disk. Both maps must exist and have identical pixel dimensions.
+  </Step>
+  <Step title="CLAHE enhancement">
+    The logic map is converted to grayscale and passed through CLAHE (clip limit `SIFT_CLAHE_LIMIT`, default `3.0`) to boost local contrast before feature extraction.
+  </Step>
+  <Step title="SIFT feature extraction">
+    SIFT keypoints and descriptors are extracted from the enhanced logic map and indexed in a FLANN KD-tree. This step takes **5–15 seconds** on large maps but only runs once per session.
+  </Step>
+  <Step title="Tracking loop starts">
+    The overlay window appears and begins capturing your minimap region every `SIFT_REFRESH_RATE` milliseconds (default `50` ms). Each frame is matched against the precomputed SIFT index.
+  </Step>
+</Steps>
+
+<Note>
+  Feature extraction on large maps can take 5–15 seconds on first launch but only happens once per session. Subsequent frames are fast.
+</Note>
+
+## The overlay window
+
+The overlay is an always-on-top floating Tkinter window. Its size and position are set by `WINDOW_GEOMETRY` in `config.json` (default `700x350+1500+100`). The canvas renders a `VIEW_SIZE` × `VIEW_SIZE` crop (default `400×400` pixels) of the display map centered on your detected position.
+
+### Position marker states
+
+| Marker appearance | Meaning |
+|---|---|
+| Red dot + white ring | Accurately locked — SIFT matched successfully this frame |
+| Yellow dot + teal ring | Inertial estimate — tracking failed but last position is being held |
+| Black screen with `SIFT Searching...` | Lost — inertial period has expired |
+
+### Inertial navigation
+
+When SIFT matching fails (fewer than `SIFT_MIN_MATCH_COUNT` good matches, or homography is invalid), the tracker does not immediately give up. Instead it holds the last known position and increments a frame counter. If tracking resumes within `MAX_LOST_FRAMES` frames (default `50`), it picks up seamlessly with the yellow inertial marker. Once `MAX_LOST_FRAMES` is exceeded without recovery, the display goes black and shows `SIFT Searching...`.
+
+## Key configuration values
+
+The values below are read from `config.json` at startup. Edit the file and restart to apply changes.
+
+| Key | Default | Effect |
+|---|---|---|
+| `VIEW_SIZE` | `400` | Width and height of the overlay crop in pixels |
+| `MAX_LOST_FRAMES` | `50` | Frames of inertial hold before giving up |
+| `SIFT_MIN_MATCH_COUNT` | `5` | Minimum good matches required to accept a position fix |
+| `SIFT_MATCH_RATIO` | `0.9` | Lowe's ratio threshold for match filtering |
+| `SIFT_RANSAC_THRESHOLD` | `8.0` | RANSAC reprojection error threshold in pixels |
+| `SIFT_CLAHE_LIMIT` | `3.0` | CLAHE clip limit for contrast enhancement |
+| `SIFT_REFRESH_RATE` | `50` | Milliseconds between tracking frames (~20 FPS) |
+
+<Tip>
+  Increasing `SIFT_MIN_MATCH_COUNT` makes position fixes more accurate and reduces false locks, but the tracker will enter the "searching" state more often in areas with few features.
+</Tip>
+
+<Tip>
+  SIFT works best on textured terrain with varied features. It may struggle with large featureless areas such as open ocean or flat plains — consider switching to AI mode for those regions.
+</Tip>

@@ -1,0 +1,90 @@
+---
+title: "Train a custom ResNet18 heatmap model for map tracking"
+description: "Use train.py to train HeatmapTrackerNet on your game map — a ResNet18 backbone that outputs 64×64 Gaussian heatmaps for precise position prediction."
+---
+
+`train.py` trains a lightweight neural network to predict a player's position on the full map from a minimap screenshot crop. You would use this when you want to experiment with a self-contained position regression model as an alternative to the LoFTR-based production tracker. Training produces a `best_tracker_model.pth` file you can load and evaluate independently.
+
+<Warning>
+Training requires PyTorch with CUDA for reasonable speed. CPU training of 30 epochs on 30,000 samples can take many hours.
+</Warning>
+
+## Model architecture
+
+The model is `HeatmapTrackerNet`, built on a pretrained **ResNet18** backbone. Instead of predicting raw X/Y coordinates directly, it outputs a **64×64 Gaussian heatmap** — a 2D image where the brightest pixel indicates the predicted position. This representation is more robust to ambiguous or occluded minimap content than a single coordinate pair.
+
+```python
+def forward(self, x):
+    x = self.backbone(x)
+    return x.view(-1, 1, self.heatmap_size, self.heatmap_size)
+```
+
+The ResNet18 fully-connected layer is replaced with a linear layer that outputs 4096 values (64×64), followed by a Sigmoid activation to keep heatmap brightness in the 0.0–1.0 range. During inference, the coordinates are recovered by finding the index of the maximum value in the heatmap.
+
+| Component | Detail |
+|---|---|
+| Backbone | ResNet18 with ImageNet pretrained weights |
+| Output | 64×64 Gaussian heatmap (1 channel) |
+| Loss function | `MSELoss` between predicted and target heatmaps |
+| Optimizer | Adam, `lr=1e-4` |
+| Input size | 150×150 minimap crop (normalized) |
+
+## Training configuration
+
+```python
+batch_size = 32
+learning_rate = 3e-4  # initial LR
+epochs = 30
+```
+
+These values are defined inside `train_model()` in `train.py`. Reduce `batch_size` to 16 or 8 if you encounter GPU out-of-memory errors.
+
+## Input format
+
+Training reads from a `labels.txt` file in the working directory. Each line contains one sample:
+
+```
+image_path,norm_x,norm_y
+```
+
+- `image_path` — relative path to the minimap crop image
+- `norm_x`, `norm_y` — normalized position on the full map, in the range 0.0–1.0
+
+Images are expected to be approximately 150×150 pixels (they are resized to exactly 150×150 during loading). Generate `labels.txt` and the corresponding images using `dataset_generator.py` — see the [dataset generation](/advanced/dataset-generation) page.
+
+## Running training
+
+```bash
+python train.py
+```
+
+Training logs epoch loss and a sample coordinate prediction every 100 batches so you can monitor convergence:
+
+```
+Epoch [1/30], Step [100/938], Loss: 0.003241
+  [Monitor] True: (0.512, 0.378) | Predicted: (0.498, 0.361)
+```
+
+The best model checkpoint is saved automatically whenever a new lowest epoch loss is found:
+
+```
+best_tracker_model.pth
+```
+
+If no improvement is seen in a given epoch, the previous best checkpoint is kept.
+
+## Hardware
+
+Training automatically uses CUDA if a compatible GPU is available, and falls back to CPU otherwise:
+
+```python
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+```
+
+On Windows, the DataLoader runs with `num_workers=0` to avoid multiprocessing issues.
+
+## Note on the production tracker
+
+<Note>
+The main tracker (`main_ai.py`) uses `LoftrEngine`, which is based on the **LoFTR Transformer** from the `kornia` library — not the custom `HeatmapTrackerNet` model trained here. `train.py` is for users who want to experiment with a lightweight position regression alternative. The LoFTR approach requires no training data and generally performs better out of the box.
+</Note>

@@ -1,0 +1,75 @@
+---
+title: "Calibrate the minimap capture region with selector.py"
+description: "Use the visual selector tool to position and resize a capture box over your in-game minimap, preview the result, and save the coordinates to config.json."
+---
+
+Before the tracker can locate you on the map, it needs to know exactly where your game's minimap appears on screen. Calibration defines that region: a square bounding box whose pixel coordinates are saved to `config.json` and used by the tracker on every frame it captures.
+
+## How calibration works
+
+Running `selector.py` opens a semi-transparent overlay window directly on top of your game. You position and resize this window until its green circle aligns with your minimap, then confirm the selection. The tool captures a screenshot of that region, shows you a preview, and — if you approve — writes the coordinates to `config.json`.
+
+<Tip>
+  Run calibration with your game open and your minimap fully visible for the most accurate results.
+</Tip>
+
+## Run the selector
+
+<Steps>
+  <Step title="Launch the selector">
+    Run the selector directly from the command line:
+
+    ```bash
+    python selector.py
+    ```
+
+    A semi-transparent black window with a green circle and crosshair appears on screen. It starts at position `(100, 100)` with a size of 150 × 150 pixels, or at your last saved position if `config.json` already exists.
+  </Step>
+
+  <Step title="Position and resize the window">
+    Use the following controls to align the overlay with your minimap:
+
+    | Control | Action |
+    |---|---|
+    | Left-click drag | Move the window to a new position |
+    | Scroll wheel up | Increase window size by 10 px |
+    | Scroll wheel down | Decrease window size by 10 px (minimum 80 px) |
+    | **Enter** or double-click | Confirm and open the preview |
+    | **ESC** | Exit without saving |
+
+    The overlay window is always square — width and height are kept equal.
+  </Step>
+
+  <Step title="Confirm the preview">
+    Pressing **Enter** or double-clicking hides the overlay, waits 100 ms for it to clear from the screen, then takes a screenshot of the selected region and opens a preview window.
+
+    The preview shows:
+    - A screenshot of what will be captured each frame
+    - The pixel coordinates and dimensions (`X`, `Y`, size)
+
+    Click **Confirm** to save the region to `config.json`, or **Retake** to go back and reposition the overlay. You can also press **Enter** in the preview to confirm, or **ESC** to retake.
+  </Step>
+</Steps>
+
+## Saved config.json output
+
+After confirming, `selector.py` writes a `MINIMAP` section to `config.json`:
+
+```json
+"MINIMAP": {
+  "top": 309,
+  "left": 1837,
+  "width": 180,
+  "height": 180
+}
+```
+
+All four values are pixel coordinates relative to the top-left corner of your primary monitor. `top` and `left` mark the position of the capture region; `width` and `height` are always equal (the window is square).
+
+## Auto-launch on startup
+
+You do not always need to run `selector.py` manually. Both `main_sift.py` and `main_ai.py` call `run_selector_if_needed()` on startup. If `config.json` is missing or does not contain a valid `MINIMAP` section with `top` and `left` keys, the selector launches automatically before the tracker starts.
+
+<Note>
+  Both trackers also pass `force=True` when called from `__main__`, so calibration always runs once at startup when you launch either tracker directly.
+</Note>

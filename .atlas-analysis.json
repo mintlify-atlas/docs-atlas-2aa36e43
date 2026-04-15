@@ -1,0 +1,82 @@
+{
+  "projectType": "general",
+  "projectName": "Game Map Tracker",
+  "projectDescription": "A real-time game map tracking overlay that uses computer vision (SIFT) and deep learning (LoFTR) to automatically locate the player's position on a large game map by matching the in-game minimap.",
+  "theme": "palm",
+  "primaryColor": "#228ef3",
+  "lightColor": "#7bf766",
+  "darkColor": "#141414",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "modes"
+            ]
+          },
+          {
+            "group": "Setup & Configuration",
+            "pages": [
+              "setup/minimap-calibration",
+              "setup/map-files",
+              "configuration"
+            ]
+          },
+          {
+            "group": "Using the Tracker",
+            "pages": [
+              "usage/sift-mode",
+              "usage/ai-mode",
+              "usage/routes",
+              "usage/markers"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/map-download",
+              "advanced/ai-training",
+              "advanced/dataset-generation"
+            ]
+          },
+          {
+            "group": "Troubleshooting",
+            "pages": [
+              "troubleshooting/common-issues",
+              "troubleshooting/faq"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Dual-engine tracking: SIFT (CPU-based, fast) and LoFTR AI (GPU-based, robust)",
+    "Real-time floating overlay window with always-on-top display",
+    "Dual-map separation: pure logic map for matching, annotated display map for rendering",
+    "Inertial navigation to maintain position during brief tracking loss",
+    "CLAHE contrast enhancement for weak-texture areas (ocean, plains)",
+    "Route management system with categories (plants, routes, other) and visit tracking",
+    "Interactive minimap calibration tool (selector.py)",
+    "Mouse click-through mode with F9 hotkey toggle for seamless gameplay",
+    "Custom AI model training pipeline with synthetic dataset generation",
+    "Map tile download and stitching utility"
+  ],
+  "publicApiSurface": [
+    "main_sift.py — Launch SIFT tracking mode",
+    "main_ai.py — Launch LoFTR AI tracking mode",
+    "selector.py — Launch minimap calibration tool",
+    "config.json — Main configuration file for all tracking parameters",
+    "tracker_engine.LoftrEngine — LoFTR feature matching engine",
+    "route_manager.RouteManager — Route loading and drawing manager",
+    "train.py:train_model() — Train custom heatmap tracker model",
+    "dataset_generator.py:generate_training_data() — Generate synthetic training data",
+    "download_map.py:download_and_stitch() — Download and stitch map tiles",
+    "draw_markers.py — Convert JSON point data to map markers"
+  ]
+}

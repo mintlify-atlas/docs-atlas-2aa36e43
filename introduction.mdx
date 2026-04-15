@@ -1,0 +1,53 @@
+---
+title: "Game Map Tracker: Real-Time Player Position Overlay"
+description: "A floating Windows overlay that captures your in-game minimap and matches it to a full-resolution game map using SIFT or LoFTR AI to pinpoint your location."
+---
+
+Game Map Tracker is a real-time Windows overlay that continuously captures your in-game minimap, matches it against a full-resolution game map using computer vision, and displays your exact position in a floating window. You choose between two engines: SIFT for fast, CPU-only tracking, and LoFTR AI for robust GPU-powered matching that handles difficult terrain and heavy UI occlusion. This documentation covers installation, configuration, both tracking modes, and advanced usage.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get the tracker running in minutes with the pre-built package or Python source.
+  </Card>
+  <Card title="Tracking modes" icon="sliders" href="/modes">
+    Compare SIFT and AI modes and pick the right engine for your game.
+  </Card>
+  <Card title="Minimap calibration" icon="crosshairs" href="/setup/minimap-calibration">
+    Align the capture region to your game's minimap with the visual selector tool.
+  </Card>
+  <Card title="Configuration reference" icon="gear" href="/configuration">
+    Explore every `config.json` setting for tracking behavior and display.
+  </Card>
+</CardGroup>
+
+## Dual-map architecture
+
+Game Map Tracker loads two separate map images at startup: a **logic map** (`big_map.png`) and a **display map** (`big_map-1.png`). Both files must be the same pixel dimensions.
+
+- **Logic map** — a clean, annotation-free image used exclusively for feature extraction and matching. Keeping this map free of icons and overlays maximizes the number of stable keypoints available to the matching engine.
+- **Display map** — the same map with resource markers, route lines, or other annotations. This is the image rendered inside the overlay window. The tracker draws your position dot on top of this image, so markers never interfere with detection accuracy.
+
+This separation means you can update the display map with new markers without affecting tracking quality, and the AI never mistakes a map annotation for a terrain feature.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Dual-engine architecture" icon="engine">
+    SIFT provides smooth CPU-only tracking for everyday use. LoFTR Transformer dense matching handles extreme UI occlusion, severe zoom, and low-texture areas where SIFT cannot find enough keypoints.
+  </Card>
+  <Card title="VRAM-optimized AI mode" icon="microchip">
+    The LoFTR engine is heavily optimized — GPU memory consumption stays under 1 GB, making it accessible on mid-range hardware without out-of-memory crashes.
+  </Card>
+  <Card title="CLAHE weak-texture enhancement" icon="eye">
+    Contrast Limited Adaptive Histogram Equalization (CLAHE) is applied to both the minimap capture and the logic map before feature extraction, pulling usable keypoints from oceans, open plains, and other near-featureless regions.
+  </Card>
+  <Card title="Inertial navigation fallback" icon="compass">
+    When tracking is briefly lost, the last known position is held for up to `MAX_LOST_FRAMES` frames while the search radius expands. Tracking resumes automatically without user intervention.
+  </Card>
+  <Card title="Radar scan fallback (AI mode)" icon="radar">
+    If the AI mode loses the target entirely, it opens a manual relocation window showing the full display map. Double-click your location to resume local tracking instantly.
+  </Card>
+  <Card title="Click-through overlay" icon="arrow-pointer">
+    Press F9 to lock the overlay so mouse clicks pass through to the game. The window border and title bar are hidden in locked mode. Press F9 again to restore full interaction.
+  </Card>
+</CardGroup>

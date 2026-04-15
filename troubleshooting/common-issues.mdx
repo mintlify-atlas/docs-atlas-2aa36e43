@@ -1,0 +1,163 @@
+---
+title: "Fix common Game Map Tracker startup and tracking errors"
+description: "Step-by-step solutions for map file errors, SIFT tracking loss, GPU out-of-memory, missing dependencies, and overlay window problems."
+---
+
+If the tracker isn't working as expected, start here. Most problems fall into one of a few categories: missing or misconfigured map files, a misaligned minimap capture region, or a missing Python dependency. Work through the relevant accordion below before digging deeper.
+
+<Tip>
+  Re-run minimap calibration first — a misaligned capture region is the most common cause of tracking failure. Press **Re-locate** in AI mode, or restart `main_sift.py` (calibration runs automatically on each launch).
+</Tip>
+
+<AccordionGroup>
+  <Accordion title='Error: "找不到逻辑地图文件" — logic map file not found'>
+    **Error message**
+
+    ```
+    FileNotFoundError: 找不到逻辑地图文件: big_map.png，请检查路径！
+    ```
+
+    **Cause**
+
+    The tracker cannot find the map file at the path specified by `LOGIC_MAP_PATH` in `config.json`. By default it looks for `big_map.png` in the same directory as `main_sift.py`.
+
+    **Fix**
+
+    Place `big_map.png` in the same folder as `main_sift.py`, or update `LOGIC_MAP_PATH` in `config.json` to point to its actual location:
+
+    ```json
+    "LOGIC_MAP_PATH": "maps/big_map.png"
+    ```
+  </Accordion>
+
+  <Accordion title="Error: map size mismatch between logic and display map">
+    **Error message**
+
+    ```
+    严重错误：逻辑地图(W×H) 与 显示地图(W×H) 尺寸不一致！
+    ```
+
+    **Cause**
+
+    `LOGIC_MAP_PATH` and `DISPLAY_MAP_PATH` point to images with different pixel dimensions. The tracker enforces identical sizes at startup and exits if they differ.
+
+    **Fix**
+
+    Both map images must be exactly the same pixel size. If you only have one map file and do not need a separate annotated version, set both config keys to the same file:
+
+    ```json
+    "LOGIC_MAP_PATH": "big_map.png",
+    "DISPLAY_MAP_PATH": "big_map.png"
+    ```
+  </Accordion>
+
+  <Accordion title='Tracker always shows "SIFT Searching..."'>
+    **Cause**
+
+    The minimap capture region is misaligned with the actual minimap on screen, or the map contains large featureless areas (open water, plains) that produce too few SIFT keypoints to match reliably.
+
+    **Fix**
+
+    Try these steps in order:
+
+    1. Re-run minimap calibration. `selector.py` launches automatically on startup, or press the **Re-locate** button in AI mode. Make sure the capture box is centered exactly over your in-game minimap.
+    2. Lower `SIFT_MIN_MATCH_COUNT` to `3` in `config.json` to accept matches with fewer keypoints.
+    3. Lower `SIFT_MATCH_RATIO` to `0.75` to relax the Lowe's ratio test and retain more candidate matches.
+    4. Increase `SIFT_CLAHE_LIMIT` to `5.0` to apply stronger contrast enhancement on flat terrain.
+
+    ```json
+    "SIFT_MIN_MATCH_COUNT": 3,
+    "SIFT_MATCH_RATIO": 0.75,
+    "SIFT_CLAHE_LIMIT": 5.0
+    ```
+  </Accordion>
+
+  <Accordion title="AI mode opens a relocation window immediately on startup">
+    **Cause**
+
+    This is expected behavior. AI mode (`main_ai.py`) starts in the `MANUAL_RELOCATE` state and needs an initial position before it can begin local tracking.
+
+    **Fix**
+
+    Double-click your current location on the full map in the selector window that appears at startup. The tracker will then switch to `LOCAL_TRACK` mode and begin following your minimap automatically.
+  </Accordion>
+
+  <Accordion title="VRAM / GPU out-of-memory error">
+    **Cause**
+
+    The LoFTR model cannot fit into your GPU's available VRAM alongside other running applications.
+
+    **Fix**
+
+    The LoFTR model used in AI mode is optimized to use under 1 GB of VRAM. Try the following:
+
+    - Close other GPU-intensive applications (games, video editors, other ML workloads) before launching the tracker.
+    - Ensure you are running the latest version of the project, which includes the optimized lightweight model.
+    - Switch to SIFT mode (`main_sift.py`) if your GPU memory is too limited — SIFT runs entirely on CPU.
+  </Accordion>
+
+  <Accordion title="ImportError for torch or kornia">
+    **Cause**
+
+    `torch` and `kornia` are optional dependencies used only by `main_ai.py`. They are listed in `requirements.txt` but installing from it without specifying a CUDA index URL installs the CPU-only build of PyTorch.
+
+    **Fix**
+
+    Install the correct build for your system:
+
+    ```bash
+    # CPU-only (no GPU acceleration):
+    pip install torch kornia
+
+    # CUDA (replace cu121 with your installed CUDA version):
+    pip install torch --index-url https://download.pytorch.org/whl/cu121
+    pip install kornia
+    ```
+
+    <Note>
+      You only need `torch` and `kornia` if you use `main_ai.py`. SIFT mode (`main_sift.py`) has no GPU dependencies.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Tracking is inaccurate or jittery">
+    **Cause**
+
+    SIFT is accepting low-confidence matches, or there is a zoom level mismatch between your minimap and the full map (the minimap covers a different area than expected).
+
+    **Fix**
+
+    - Increase `SIFT_MIN_MATCH_COUNT` (for example, to `8`) to require more keypoints before accepting a match.
+    - Decrease `SIFT_RANSAC_THRESHOLD` (for example, to `5.0`) for stricter geometric verification, which filters out more outlier matches.
+
+    ```json
+    "SIFT_MIN_MATCH_COUNT": 8,
+    "SIFT_RANSAC_THRESHOLD": 5.0
+    ```
+  </Accordion>
+
+  <Accordion title="Overlay window does not stay on top of the game">
+    **Cause**
+
+    Some games running in full-screen exclusive mode prevent other windows from appearing on top, even when they have the `always-on-top` attribute set.
+
+    **Fix**
+
+    Run the game in **borderless windowed** mode. This allows the tracker overlay to remain visible above the game window.
+  </Accordion>
+
+  <Accordion title='Error: "找不到小地图选择器工具" — selector tool not found'>
+    **Error message**
+
+    ```
+    ❌ 严重错误：找不到小地图选择器工具！期望路径：<path>/selector.py
+    ```
+
+    **Cause**
+
+    The tracker could not find `selector.py` at the expected path. Without the selector and without a valid `MINIMAP` section in `config.json`, the tracker cannot start.
+
+    **Fix**
+
+    Ensure `selector.py` is in the same directory as `main_sift.py` and `main_ai.py`. If you are using the packaged `.exe` version, `MinimapSetup.exe` must be in the same folder as the main executable.
+  </Accordion>
+</AccordionGroup>

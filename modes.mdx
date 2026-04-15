@@ -1,0 +1,139 @@
+---
+title: "Compare tracking modes: SIFT, LoFTR AI, and Hybrid"
+description: "Compare Game Map Tracker's three engines — SIFT for CPU speed, LoFTR AI for robustness, and Hybrid for combining both — to pick the right one."
+---
+
+Game Map Tracker ships with three independent tracking engines. SIFT (Scale-Invariant Feature Transform) is a classical computer vision algorithm that runs entirely on CPU and delivers smooth, low-latency tracking for most games. LoFTR AI uses a Transformer-based dense matching model that runs on GPU and handles situations where SIFT cannot find enough reliable keypoints — heavy UI overlays on the minimap, large featureless water or grass areas, or unusual zoom levels. Hybrid mode combines a lightweight heatmap neural network for coarse positioning with a fast local SIFT pass for sub-pixel precision, requiring a custom-trained model.
+
+## Mode comparison
+
+| Feature | SIFT mode | AI mode | Hybrid mode |
+|---|---|---|---|
+| Hardware required | CPU only | GPU recommended (CUDA) | GPU required |
+| VRAM usage | None | Under 1 GB | Varies |
+| Tracking robustness | Good | Excellent | Very good |
+| Terrain type | Works well on textured maps | Handles low-texture and occluded maps | Requires trained model for your map |
+| Entry point | `main_sift.py` | `main_ai.py` | `main_hybrid.py` |
+
+<Tip>
+  Start with SIFT mode. It requires no GPU and runs smoothly on any machine. Switch to AI mode only if SIFT loses tracking regularly — for example, when your minimap shows large ocean areas or is heavily covered by in-game UI elements.
+</Tip>
+
+## SIFT mode
+
+SIFT mode (`main_sift.py`) uses the OpenCV SIFT algorithm to extract keypoints from both the minimap and the logic map, then finds correspondences using a FLANN nearest-neighbor matcher. The pipeline runs on CPU and completes each frame in well under 100 ms on typical hardware.
+
+<Tabs>
+  <Tab title="How it works">
+    The SIFT tracking pipeline runs the following steps on every frame:
+
+    1. **CLAHE preprocessing** — The minimap screenshot and the pre-loaded logic map are both enhanced using Contrast Limited Adaptive Histogram Equalization (`clipLimit` set by `SIFT_CLAHE_LIMIT`, tile grid 8×8). This step pushes usable keypoints out of low-contrast regions like open water.
+
+    2. **Feature extraction** — `cv2.SIFT_create()` detects and describes keypoints in the enhanced minimap image. Keypoints for the full logic map are computed once at startup and cached.
+
+    3. **FLANN matching** — A FLANN KD-tree matcher (`algorithm=1`, `trees=5`, `checks=50`) finds the two nearest neighbors in the large-map keypoint set for each minimap keypoint.
+
+    4. **Lowe's ratio test** — A match is accepted only when the distance to the nearest neighbor is less than `SIFT_MATCH_RATIO` times the distance to the second-nearest neighbor, filtering ambiguous matches.
+
+    5. **RANSAC homography** — If at least `SIFT_MIN_MATCH_COUNT` matches survive the ratio test, `cv2.findHomography` with RANSAC (threshold `SIFT_RANSAC_THRESHOLD`) computes the projective transform from minimap space to map space.
+
+    6. **Center projection** — The center pixel of the minimap (`w/2`, `h/2`) is transformed through the homography to get the player's coordinates on the logic map.
+
+    7. **Inertial fallback** — If the homography fails or fewer than `SIFT_MIN_MATCH_COUNT` matches are found, the last valid position is reused for up to `MAX_LOST_FRAMES` frames. The overlay draws the player dot in yellow during inertial hold.
+  </Tab>
+  <Tab title="Configuration parameters">
+    These settings in `config.json` control SIFT mode behavior:
+
+    | Parameter | Default | Description |
+    |---|---|---|
+    | `SIFT_CLAHE_LIMIT` | `3.0` | Clip limit for CLAHE contrast enhancement. Higher values extract more keypoints from low-texture areas but may amplify noise. |
+    | `SIFT_MATCH_RATIO` | `0.9` | Lowe's ratio test threshold. Lower values are more selective — increase if tracking is unstable, decrease if too many matches are rejected. |
+    | `SIFT_MIN_MATCH_COUNT` | `5` | Minimum number of good matches required to compute a homography. Raise this to reduce false positives on featureless frames. |
+    | `SIFT_RANSAC_THRESHOLD` | `8.0` | Maximum reprojection error (pixels) for a match to be considered an inlier by RANSAC. |
+    | `SIFT_REFRESH_RATE` | `50` | Milliseconds between tracking updates. Lower values increase CPU usage; `50` gives approximately 20 FPS. |
+
+    Example `config.json` snippet:
+
+    ```json
+    {
+      "SIFT_CLAHE_LIMIT": 3.0,
+      "SIFT_MATCH_RATIO": 0.9,
+      "SIFT_MIN_MATCH_COUNT": 5,
+      "SIFT_RANSAC_THRESHOLD": 8.0,
+      "SIFT_REFRESH_RATE": 50
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## AI mode
+
+AI mode (`main_ai.py`) uses the LoFTR (Local Feature TRansformer) model from the `kornia` library. LoFTR performs dense keypoint matching using a self- and cross-attention Transformer, which finds correspondences even in texture-poor regions where SIFT produces no usable keypoints. The model runs on CUDA GPU for best performance; CPU fallback is available but significantly slower.
+
+<Tabs>
+  <Tab title="How it works">
+    The AI tracking pipeline runs in a background thread separate from the UI render loop, so the overlay remains responsive even during GPU inference.
+
+    1. **Local search region** — Instead of matching against the entire logic map, the engine crops a region around the last known position. The radius starts at `AI_TRACK_RADIUS` pixels and expands on lost frames to recover tracking without a full-map scan.
+
+    2. **LoftrEngine preprocessing** — The minimap capture and the local map crop are both preprocessed by the `LoftrEngine` class (grayscale conversion and normalization) and moved to the selected device (CUDA or CPU).
+
+    3. **LoFTR Transformer matching** — The engine runs the LoFTR model to produce dense keypoint pairs (`keypoints0`, `keypoints1`) and per-pair confidence scores.
+
+    4. **Confidence filtering** — Only matches with confidence above `AI_CONFIDENCE_THRESHOLD` are retained.
+
+    5. **RANSAC homography** — If at least `AI_MIN_MATCH_COUNT` confident matches remain, RANSAC with threshold `AI_RANSAC_THRESHOLD` computes the homography from minimap to local-crop space. The center point is projected and offset back to global map coordinates.
+
+    6. **Smoothed coordinate** — The raw projected coordinate is exponentially smoothed to reduce jitter. The smoothing factor is `0.15` for small movements (under 15 pixels) and `0.45` for larger displacements, providing stable display without excessive lag.
+
+    7. **Expanding-radius local search** — On the first lost frame, the search radius increases by 300 pixels. This allows the tracker to recover from brief occlusions without triggering a full relocation.
+
+    8. **Manual relocation fallback** — After `max_lost_frames` (4) consecutive failed frames, the state machine switches to `MANUAL_RELOCATE`. A full-map selector window opens, letting you double-click your current location to re-anchor the tracker.
+  </Tab>
+  <Tab title="Configuration parameters">
+    These settings in `config.json` control AI mode behavior:
+
+    | Parameter | Default | Description |
+    |---|---|---|
+    | `AI_CONFIDENCE_THRESHOLD` | `0.6` | Minimum LoFTR match confidence to accept a keypoint pair. Increase to reduce false matches on ambiguous frames. |
+    | `AI_MIN_MATCH_COUNT` | `6` | Minimum number of confident matches required to compute a homography. |
+    | `AI_RANSAC_THRESHOLD` | `8.0` | Maximum reprojection error (pixels) for RANSAC inlier classification. |
+    | `AI_TRACK_RADIUS` | `500` | Pixel radius around the last known position to search for matches. Larger values recover from larger positional jumps but increase GPU memory usage per frame. |
+    | `AI_REFRESH_RATE` | `200` | Milliseconds between AI inference cycles. Lower values increase GPU utilization. |
+
+    Example `config.json` snippet:
+
+    ```json
+    {
+      "AI_CONFIDENCE_THRESHOLD": 0.6,
+      "AI_MIN_MATCH_COUNT": 6,
+      "AI_RANSAC_THRESHOLD": 8.0,
+      "AI_TRACK_RADIUS": 500,
+      "AI_REFRESH_RATE": 200
+    }
+    ```
+
+    <Warning>
+      Setting `AI_TRACK_RADIUS` to very large values (above 1000) significantly increases the size of the map crop fed to the LoFTR model, which raises VRAM usage and inference time per frame. If you encounter out-of-memory errors, reduce this value first.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Hybrid mode
+
+Hybrid mode (`main_hybrid.py`) combines a custom-trained `HeatmapTrackerNet` neural network with a local SIFT pass. The heatmap model performs a coarse global prediction — estimating your approximate position anywhere on the full map — and then SIFT refines the result with sub-pixel accuracy within a 100-pixel radius around that estimate. This design avoids the slow global SIFT scan at startup while still delivering the geometric precision of keypoint matching.
+
+<Warning>
+  Hybrid mode requires a trained model file (`best_tracker_model.pth`) in the working directory. Generate training data with `dataset_generator.py` and train the model with `train.py` before using this mode. See the [Advanced](/advanced/ai-training) section for details.
+</Warning>
+
+### How it works
+
+1. **Donut mask** — A circular mask is applied to the minimap capture, zeroing out corners and the center (inner radius 15 px) to eliminate UI clutter before feeding the image to the network.
+2. **Heatmap coarse prediction** — The minimap is passed through `HeatmapTrackerNet` (ResNet18 backbone). The output is a 64×64 heatmap; the peak pixel coordinate is scaled to global map coordinates.
+3. **Local SIFT refinement** — SIFT runs on a 100-pixel radius crop around the heatmap prediction using a tight FLANN match (requires 8 good matches). If SIFT succeeds, the refined coordinate replaces the heatmap result; otherwise the heatmap coordinate is used as-is.
+4. **Status display** — The overlay labels each frame as `SIFT Precise (N)` (refined) or `AI Heatmap Coarse` (heatmap-only), along with per-frame processing time in milliseconds.
+
+```bash
+python main_hybrid.py
+```

@@ -1,0 +1,94 @@
+---
+title: 'Run AI mode: LoFTR tracking, routes, and click-through'
+description: 'How to run the AI tracker, use route overlays, adjust transparency, toggle click-through lock mode, and manually relocate your position.'
+---
+
+AI mode uses the LoFTR Transformer model to match your minimap against a local crop of the logic map. Unlike SIFT, LoFTR works on image patches directly without requiring distinctive keypoints, which makes it significantly more robust in areas with repetitive textures or low visual detail. Use AI mode when SIFT loses tracking frequently, or when you want route overlays and click-through functionality. The AI inference runs in a background thread while the UI renders at approximately 33 FPS independently.
+
+## Launching AI mode
+
+```bash
+python main_ai.py
+```
+
+The minimap calibration selector opens on every launch. Confirm or adjust your minimap region, then close the selector to start the tracker.
+
+<Note>
+  A CUDA-capable GPU is strongly recommended for real-time performance. If no CUDA device is detected, PyTorch falls back to CPU automatically — tracking will work but inference will be slower.
+</Note>
+
+## The overlay window
+
+The AI mode overlay is resizable. Dragging the window edge changes its dimensions, and the map crop scales proportionally to fill the canvas. The top menu bar is always visible when the window is unlocked.
+
+### Menu bar controls
+
+| Control | Description |
+|---|---|
+| **Plants / Routes / Other** dropdowns | Category menus — check or uncheck individual route names to show or hide them on the overlay |
+| Transparency slider | Sets window opacity from `0.1` (nearly invisible) to `1.0` (fully opaque). The window becomes fully opaque when your mouse enters it while unlocked. |
+| **Lock** button | Toggles click-through mode on or off |
+
+### Re-locate button
+
+A **Re-locate** button appears in the top-left corner of the map canvas at all times. Click it to open the full map selector immediately, regardless of tracking state, and manually set your position.
+
+## Lock and click-through mode
+
+Lock mode makes the overlay borderless and passes all mouse clicks through to the game window beneath it. Use this when you want the map visible while playing without the overlay interfering with your mouse.
+
+<Steps>
+  <Step title="Enable lock">
+    Click the **Lock** button in the menu bar, or press **F9** anywhere (including when the window is minimized or the game is in focus). The title bar disappears and mouse events pass through to the game.
+  </Step>
+  <Step title="Interact with the game">
+    The overlay remains visible at the transparency level set by the slider. Your mouse no longer interacts with the overlay.
+  </Step>
+  <Step title="Disable lock">
+    Press **F9** again, or click the **Lock** button if you can reach it. The title bar and border return, and the window becomes fully opaque for easy interaction.
+  </Step>
+</Steps>
+
+<Note>
+  The F9 hotkey is global — it works even when the overlay window does not have focus.
+</Note>
+
+## Tracking states
+
+AI mode uses a two-state system:
+
+| State | What you see | What the tracker does |
+|---|---|---|
+| `LOCAL_TRACK` | Normal map view centered on your position | AI matches your minimap against a local crop within `AI_TRACK_RADIUS` pixels of the last known position (default `500` px). On a successful match, the search radius resets. On failure, it expands by 300 px for the next frame. |
+| `MANUAL_RELOCATE` | `Waiting for Relocation...` centered on a black canvas | The AI worker pauses inference. The full map selector window opens automatically. |
+
+The tracker enters `MANUAL_RELOCATE` after `max_lost_frames` consecutive failed matches (default `4` frames). You can also trigger it manually with the **Re-locate** button.
+
+## Manual relocation
+
+When `Waiting for Relocation...` appears, the map selector window opens automatically.
+
+<Steps>
+  <Step title="Find your position on the full map">
+    The selector shows your full display map. Use the scroll wheel to zoom in and left-click-drag to pan.
+  </Step>
+  <Step title="Double-click your location">
+    Double-click the point on the map that matches your current in-game position. The selector closes and tracking resumes from that coordinate.
+  </Step>
+</Steps>
+
+The selector also shows all currently enabled routes, so you can preview waypoint positions before resuming tracking.
+
+## Key configuration values
+
+| Key | Default | Effect |
+|---|---|---|
+| `AI_TRACK_RADIUS` | `500` | Pixel radius of the local map crop searched each frame |
+| `AI_CONFIDENCE_THRESHOLD` | `0.6` | Minimum LoFTR match confidence to accept a keypoint pair |
+| `AI_MIN_MATCH_COUNT` | `6` | Minimum accepted matches required to compute homography |
+| `AI_RANSAC_THRESHOLD` | `8.0` | RANSAC reprojection error threshold in pixels |
+| `AI_REFRESH_RATE` | `200` | Target milliseconds between AI inference frames |
+
+<Tip>
+  If the tracker enters `MANUAL_RELOCATE` too often, try increasing `AI_TRACK_RADIUS` in `config.json` to give the search a larger area to work with.
+</Tip>

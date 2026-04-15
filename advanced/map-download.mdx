@@ -1,0 +1,93 @@
+---
+title: "Download and stitch game map tiles into a full map image"
+description: "Use download_map.py to configure a tile URL pattern, set coordinate ranges, fetch all tiles, and stitch them into a full-resolution map PNG."
+---
+
+`download_map.py` fetches every tile image from a game's map CDN and stitches them into one large PNG. You need this when the game doesn't provide a downloadable map image — the full map only exists as a grid of small tiles served by a web endpoint. Run this script once to build the `big_map.png` file that the tracker uses for position matching.
+
+## How tile maps work
+
+Game maps are typically served as small 256×256 pixel images arranged in a grid, indexed by X and Y coordinates. The server exposes a URL pattern like `tile-{x}_{y}.png` where you substitute the tile coordinates to fetch each piece. `download_map.py` iterates over every coordinate in the range you define, downloads each tile, and pastes it onto a canvas at the correct position to produce a seamless full-resolution map.
+
+The final canvas size is determined by the coordinate range and tile size:
+
+```
+width  = (X_MAX - X_MIN + 1) × TILE_SIZE
+height = (Y_MAX - Y_MIN + 1) × TILE_SIZE
+```
+
+## Configuration
+
+Open `download_map.py` and edit the variables in the configuration block at the top of the file:
+
+```python
+BASE_URL = "https://wiki-dev-patch-oss.oss-cn-hangzhou.aliyuncs.com/res/lkwg/map-3.0/7/tile-{x}_{y}.png"
+
+X_MIN = -12
+X_MAX = 11
+Y_MIN = -11
+Y_MAX = 11
+
+TILE_SIZE = 256  # standard tile size in pixels
+```
+
+| Variable | Description |
+|---|---|
+| `BASE_URL` | URL pattern for a single tile. Must contain `{x}` and `{y}` placeholders. |
+| `X_MIN`, `X_MAX` | Horizontal range of tile coordinates to download. |
+| `Y_MIN`, `Y_MAX` | Vertical range of tile coordinates to download. |
+| `TILE_SIZE` | Pixel size of each tile (almost always 256). |
+
+<Note>
+You need to know the tile URL pattern and coordinate range for your specific game — both vary per game and sometimes per map zoom level.
+</Note>
+
+## Steps to use
+
+<Steps>
+  <Step title="Find your game's tile URL pattern">
+    Open the game's interactive map in a browser. Open DevTools (**F12**), go to the **Network** tab, and filter by **Img**. Pan or zoom the map to trigger tile requests and copy the URL of any tile request you see.
+
+    <Tip>
+      Look for URLs with numbers in the path that change as you pan — those are the tile coordinates.
+    </Tip>
+  </Step>
+  <Step title="Edit BASE_URL">
+    Replace the hardcoded X and Y values in the URL with `{x}` and `{y}` placeholders, then set `BASE_URL` to that string.
+
+    ```python
+    BASE_URL = "https://example.com/map/tiles/{x}/{y}.png"
+    ```
+  </Step>
+  <Step title="Set the coordinate range">
+    Pan to each corner of the full map in the browser while watching the Network tab to find the minimum and maximum tile coordinates, then update `X_MIN`, `X_MAX`, `Y_MIN`, and `Y_MAX`.
+  </Step>
+  <Step title="Run the script">
+    ```bash
+    python download_map.py
+    ```
+
+    The script prints progress for every tile and skips any that return 404 — these are expected for empty areas at map edges. A 0.1-second delay between requests avoids rate limiting.
+  </Step>
+  <Step title="Rename and configure the output">
+    The script saves the stitched image as `test_map_z12.png` in the same directory. Rename it to `big_map.png` and set it as the value of `LOGIC_MAP_PATH` in `config.json`.
+
+    ```bash
+    mv test_map_z12.png big_map.png
+    ```
+  </Step>
+</Steps>
+
+## Bot detection avoidance
+
+The script attaches request headers that mimic a real browser session to avoid being blocked by CDN bot detection:
+
+```python
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Referer': 'https://map.17173.com/',
+    'Origin': 'https://map.17173.com'
+}
+```
+
+Update `Referer` and `Origin` to match the domain of the game's map page if the default values cause requests to be rejected.

@@ -1,0 +1,118 @@
+---
+title: "Game Map Tracker FAQ: compatibility, performance, and setup"
+description: "Answers to common questions about game compatibility, mode selection, map sizes, Linux support, custom models, and route creation."
+---
+
+These are the questions that come up most often. If your question isn't answered here, check [Common issues](/troubleshooting/common-issues) for error-specific fixes, or open an issue on GitHub.
+
+<AccordionGroup>
+  <Accordion title="Does it work with any game?">
+    Yes, as long as the game has a minimap visible on screen and you can obtain or create a full-resolution version of the game map. You need to configure the minimap capture region using `selector.py` and provide map images via `LOGIC_MAP_PATH` and `DISPLAY_MAP_PATH` in `config.json`. There is no game-specific code in the tracker itself.
+  </Accordion>
+
+  <Accordion title="Which mode should I use — SIFT or AI?">
+    Start with SIFT (`main_sift.py`) for most games. It runs on CPU, starts in seconds, and handles the vast majority of terrain reliably.
+
+    Switch to AI mode (`main_ai.py`) if tracking fails in areas with:
+    - Open water or large featureless plains
+    - Heavy UI elements obscuring the minimap
+    - Extreme zoom level differences between your minimap and the full map
+
+    AI mode requires a CUDA-capable GPU for acceptable performance. If you do not have a compatible GPU, stay on SIFT mode.
+  </Accordion>
+
+  <Accordion title="Can I use a single image for both logic and display maps?">
+    Yes. Set both `LOGIC_MAP_PATH` and `DISPLAY_MAP_PATH` to the same file in `config.json`:
+
+    ```json
+    "LOGIC_MAP_PATH": "big_map.png",
+    "DISPLAY_MAP_PATH": "big_map.png"
+    ```
+
+    The downside is that any markers or annotations on the map may slightly affect feature matching quality. For best localization accuracy, keep the logic map clean and marker-free.
+  </Accordion>
+
+  <Accordion title="How large should my map image be?">
+    Larger is better for SIFT accuracy. The tracker efficiently crops only the viewport region for display, so even very large maps (10,000+ pixels wide) work well. The initial SIFT feature extraction takes longer on larger maps, but this computation only happens once per session — tracking runs every 50 ms once startup completes.
+  </Accordion>
+
+  <Accordion title="Why does SIFT take 5–15 seconds to start?">
+    SIFT extracts and indexes feature keypoints for the entire map on first load:
+
+    ```python
+    print("正在提取逻辑地图的全局特征点 (可能需要 5~15 秒，只运行一次)...")
+    self.kp_big, self.des_big = self.sift.detectAndCompute(logic_map_gray, None)
+    ```
+
+    This is a one-time computation per session. Once complete, you will see a confirmation in the console showing the number of keypoints found, and tracking begins immediately.
+  </Accordion>
+
+  <Accordion title="Can I add my own routes?">
+    Yes, in AI mode. Create JSON files in one of the following route directories:
+
+    - `routes/zhiwu/` — plant or resource routes
+    - `routes/diquluxian/` — area or path routes
+    - `routes/qita/` — other routes
+
+    Each file must contain a `points` array with `{x, y}` objects, where coordinates are in full map pixel space. The filename (without extension) becomes the route name shown in the menu. You can also set `"loop": true` to connect the last point back to the first.
+
+    ```json
+    {
+      "points": [
+        { "x": 1024, "y": 2048 },
+        { "x": 1100, "y": 2100 },
+        { "x": 1200, "y": 2050 }
+      ],
+      "loop": false
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="The tracker works but my position marker is offset — why?">
+    The minimap capture region is likely not centered correctly on your in-game minimap. Re-run the calibration tool:
+
+    ```bash
+    python selector.py
+    ```
+
+    The center of the capture box must align with the center of your in-game minimap. Even a small offset propagates directly into the position calculation, causing the marker to appear shifted in a consistent direction.
+  </Accordion>
+
+  <Accordion title="Can I run this on Linux or macOS?">
+    The codebase primarily targets Windows. AI mode (`main_ai.py`) uses Windows-specific APIs for the click-through overlay and borderless window features:
+
+    ```python
+    from ctypes import windll
+    ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ...)
+    ```
+
+    SIFT mode (`main_sift.py`) may work on Linux or macOS with minor modifications, since it does not use any Windows-specific APIs. However, this is not an officially supported configuration.
+  </Accordion>
+
+  <Accordion title="Can I train a custom model for my game?">
+    Yes. The repository includes tooling for training a custom model:
+
+    1. Use `dataset_generator.py` to generate training data from your map image.
+    2. Use `train.py` to train a `HeatmapTrackerNet` model on that dataset.
+
+    See the Advanced section of this documentation for full details on dataset generation and training configuration.
+  </Accordion>
+
+  <Accordion title="My minimap has a circular shape — will that cause issues?">
+    No. The tracker captures a square region and performs feature matching on the full captured image regardless of its visual shape. The donut mask used in `dataset_generator.py` is specifically designed to handle circular minimaps during training data generation, so circular minimaps are a first-class supported shape.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+<CardGroup cols={3}>
+  <Card title="Common issues" icon="triangle-exclamation" href="/troubleshooting/common-issues">
+    Error messages and step-by-step fixes for the most frequent problems.
+  </Card>
+  <Card title="Configuration reference" icon="sliders" href="/configuration">
+    All config.json keys, default values, and tuning guidance.
+  </Card>
+  <Card title="Minimap calibration" icon="crosshairs" href="/setup/minimap-calibration">
+    How to use the selector tool to set up your minimap capture region.
+  </Card>
+</CardGroup>

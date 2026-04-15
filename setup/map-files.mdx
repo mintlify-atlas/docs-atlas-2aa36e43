@@ -1,0 +1,65 @@
+---
+title: "Set up logic and display map image files for tracking"
+description: "Learn the difference between the logic map used for matching and the display map shown in the overlay, their size requirements, and how to obtain them."
+---
+
+Game Map Tracker uses two separate map images: one for feature matching and one for display. Keeping these separate lets you use a clean, marker-free image for accurate localization while showing an annotated version — with resource markers, routes, or other overlays — in the tracker window.
+
+## The dual-map architecture
+
+| File | Config key | Purpose |
+|---|---|---|
+| `big_map.png` | `LOGIC_MAP_PATH` | **Logic map** — used by SIFT or AI to match features against your minimap screenshot. Must be clean and unmodified. |
+| `big_map-1.png` | `DISPLAY_MAP_PATH` | **Display map** — rendered in the overlay window. Can contain resource markers, route lines, or any annotation. |
+
+The logic map is the source of truth for localization. Any extra pixels — markers, icons, text — degrade feature matching accuracy. Keep it as close to the raw game map as possible.
+
+The display map can be as annotated as you like; it is never used for matching calculations.
+
+## Size requirement
+
+Both maps must have identical pixel dimensions. The tracker checks this at startup and raises an error if they differ:
+
+```
+ValueError: 严重错误：逻辑地图(6144x6144) 与 显示地图(6200x6144) 尺寸不一致！
+```
+
+If you only have one map image and do not need a separate annotated version, point both config keys at the same file:
+
+```json
+"LOGIC_MAP_PATH": "big_map.png",
+"DISPLAY_MAP_PATH": "big_map.png"
+```
+
+## Where to place map files
+
+By default, the tracker looks for map files in the same directory as the script files. Place `big_map.png` and `big_map-1.png` next to `main_sift.py` (or `main_ai.py`).
+
+To use a different location, set the full or relative path in `config.json`:
+
+```json
+"LOGIC_MAP_PATH": "maps/big_map.png",
+"DISPLAY_MAP_PATH": "maps/big_map-1.png"
+```
+
+## How to obtain map images
+
+You have two main options:
+
+**Download and stitch map tiles**
+
+The included `download_map.py` script downloads PNG tiles from a tile server and stitches them into a single image. Edit the `BASE_URL`, `X_MIN`, `X_MAX`, `Y_MIN`, and `Y_MAX` variables to match your game's tile source, then run:
+
+```bash
+python download_map.py
+```
+
+The stitched image is saved as `test_map_z12.png` in the same directory. Rename or copy it to `big_map.png`.
+
+**Use the game's official wiki map**
+
+Many games publish a high-resolution map on their wiki. Download the image directly and save it as `big_map.png`. If you want a separate annotated version for display, make a copy, add your markers, and save it as `big_map-1.png`.
+
+<Tip>
+  Use PNG format for both maps. JPEG compression introduces artifacts that reduce SIFT feature detection accuracy. Larger, more detailed maps produce more keypoints and improve localization reliability.
+</Tip>

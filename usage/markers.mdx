@@ -1,0 +1,77 @@
+---
+title: 'Use draw_markers.py to paint markers on your map image'
+description: 'How to use draw_markers.py to convert JSON tile-coordinate point data into icon or circle markers painted onto your display map PNG.'
+---
+
+`draw_markers.py` is a standalone utility that reads a list of coordinate points — typically scraped from a game wiki map — and draws icon or circle markers onto your map image. Run it once to produce an annotated `DISPLAY_MAP_PATH` image, then set that output as your display map so the tracker overlays your markers alongside the live position indicator.
+
+## How it works
+
+The script reads a `points_data` list defined directly in the file. Each entry contains a `point` with `lat` and `lng` values expressed in tile coordinates at a reference zoom level. The script converts these to pixel coordinates using tile math, then draws each marker onto a copy of your input map. If an icon image exists in the `img/` folder for a given `markType`, it is drawn at 30 px wide with 80% opacity. If no icon is found, a red circle with a white outline is drawn as a fallback.
+
+## Coordinate system
+
+The script uses tile-based coordinates. Configure the following constants at the top of `draw_markers.py` to match how your map was assembled:
+
+| Constant | Default | Description |
+|---|---|---|
+| `X_MIN` | `-12` | Minimum X tile coordinate of your stitched map at `MAP_ZOOM` |
+| `Y_MIN` | `-11` | Minimum Y tile coordinate of your stitched map at `MAP_ZOOM` |
+| `TILE_SIZE` | `256` | Standard tile size in pixels |
+| `JSON_ZOOM` | `7` | Zoom level the `lat`/`lng` values in your JSON were recorded at |
+| `MAP_ZOOM` | `7` | Zoom level your stitched map image was built at |
+
+The scale factor is computed automatically: `SCALE = 2 ** (MAP_ZOOM - JSON_ZOOM)`. If your JSON was recorded at zoom 5 and your map is at zoom 7, `SCALE` becomes `4` and all coordinates are multiplied by 4 before pixel conversion.
+
+Pixel coordinates are derived as:
+
+```python
+pixel_x = (lng * SCALE) - (X_MIN * TILE_SIZE)
+pixel_y = (lat * SCALE) - (Y_MIN * TILE_SIZE)
+```
+
+## Point data format
+
+Each entry in `points_data` follows this structure:
+
+```json
+{
+  "markType": 701,
+  "title": "",
+  "id": "1s47xytw4by",
+  "point": {"lat": -881, "lng": -635},
+  "uid": "65071204",
+  "layer": "G",
+  "time": 1744155431662,
+  "version": 4
+}
+```
+
+| Field | Description |
+|---|---|
+| `markType` | Integer category code. Determines which icon image is used (e.g., `img/701.png`). Different values like `701`, `702`, `703` represent different marker categories. |
+| `point.lat` | Latitude in tile units at `JSON_ZOOM` |
+| `point.lng` | Longitude in tile units at `JSON_ZOOM` |
+| `title` | Optional label (currently used for logging only) |
+
+## Icon files
+
+Place icon images in an `img/` subdirectory next to `draw_markers.py`, named after their `markType` value (e.g., `img/701.png`, `img/702.png`). Icons must be PNG files with an alpha channel. If an icon file is missing for a given `markType`, the script logs a warning and draws a red circle instead.
+
+## Running the script
+
+Set `INPUT_MAP` and `OUTPUT_MAP` at the bottom of `draw_markers.py` (defaults: `test_map_z12.png` and `map_with_markers.png`), then run:
+
+```bash
+python draw_markers.py
+```
+
+The script opens `INPUT_MAP`, draws all markers from `points_data`, and saves the result to `OUTPUT_MAP`. After it finishes, set `DISPLAY_MAP_PATH` in `config.json` to point to your output file.
+
+<Tip>
+  Run `draw_markers.py` on a clean copy of your map image, then set `DISPLAY_MAP_PATH` in `config.json` to the output file. This keeps your logic map (`LOGIC_MAP_PATH`) free of markers, which is required for accurate SIFT and AI feature matching.
+</Tip>
+
+<Note>
+  `draw_markers.py` writes directly to the `OUTPUT_MAP` file and overwrites it on every run. Keep a backup of your original clean map before running the script for the first time.
+</Note>

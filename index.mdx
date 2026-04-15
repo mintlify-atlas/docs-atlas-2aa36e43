@@ -1,97 +1,77 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Game Map Tracker: Real-Time Game Map Position Overlay"
+description: "Real-time position tracking overlay for games. Choose SIFT for fast CPU-only tracking or LoFTR AI for GPU-powered matching on difficult terrain."
 ---
 
-## Setting up
+Game Map Tracker is a real-time floating overlay that automatically locates your position on a full game map by matching the in-game minimap using computer vision. It provides two tracking engines — the fast, CPU-only SIFT mode and the AI-powered LoFTR mode — letting you pick the right balance of speed and robustness for your game and hardware.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get the tracker running in minutes using the pre-built package or Python source.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Choose a Mode" icon="sliders" href="/modes">
+    Compare SIFT and AI modes and pick the right engine for your situation.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Minimap Calibration" icon="crosshairs" href="/setup/minimap-calibration">
+    Align the capture region to your game's minimap with the visual calibration tool.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Configuration Reference" icon="gear" href="/configuration">
+    Explore every config.json setting that controls tracking behavior and display.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## How it works
 
-Everything you need to create world-class documentation.
+The tracker captures your game's minimap from the screen, extracts visual features, and matches them against a pre-loaded full-resolution game map. Once a match is found, a floating window shows your exact location on the large map with a marker.
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+<Steps>
+  <Step title="Prepare your map files">
+    Place your full-resolution game map images (`big_map.png` for matching, `big_map-1.png` for display) in the tracker directory.
+  </Step>
+  <Step title="Calibrate the minimap region">
+    Run the selector tool to visually align the capture box over your in-game minimap. The position is saved to `config.json` automatically.
+  </Step>
+  <Step title="Choose your engine and launch">
+    Run `main_sift.py` for fast CPU tracking or `main_ai.py` for AI-powered robust tracking. The overlay window appears immediately.
+  </Step>
+  <Step title="Play and track">
+    The floating overlay updates in real time as you move. Use F9 to toggle click-through mode so the window doesn't interfere with gameplay.
+  </Step>
+</Steps>
 
-## Need inspiration?
+## Key features
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<CardGroup cols={2}>
+  <Card title="Dual-Engine Architecture" icon="engine">
+    SIFT for speed (pure CPU, smooth on any machine) and LoFTR Transformer matching for extreme reliability in difficult terrain.
+  </Card>
+  <Card title="Dual-Map Separation" icon="map">
+    A clean logic map drives feature matching while a separately annotated display map is shown in the overlay — markers never confuse the AI.
+  </Card>
+  <Card title="Inertial Navigation" icon="compass">
+    When tracking is briefly lost, the last known position is held and the search radius expands automatically so tracking resumes seamlessly.
+  </Card>
+  <Card title="Route Tracking" icon="route">
+    Load JSON route files for plants, paths, or other categories. Points turn black as you visit them, tracking progress hands-free.
+  </Card>
+  <Card title="CLAHE Enhancement" icon="eye">
+    Contrast Limited Adaptive Histogram Equalization extracts features from low-texture areas like oceans and open plains.
+  </Card>
+  <Card title="Click-Through Overlay" icon="arrow-pointer">
+    Lock the overlay with F9 to pass mouse clicks directly to the game. Unlock any time to interact with the tracker window.
+  </Card>
+</CardGroup>
+
+## Tracking modes at a glance
+
+| Feature | SIFT Mode | AI Mode |
+|---|---|---|
+| Hardware required | CPU only | GPU recommended (CUDA) |
+| VRAM usage | None | Under 1 GB |
+| Tracking robustness | Good | Excellent |
+| Entry point | `main_sift.py` | `main_ai.py` |
+| Best for | Most games, regular terrain | Heavy UI occlusion, low-texture maps |
+
+<Note>
+  New users should start with the [pre-built AI 2.0 package](https://github.com/761696148/Game-Map-Tracker) for zero-configuration setup — no Python or PyTorch environment required.
+</Note>

@@ -1,0 +1,89 @@
+---
+title: "Generate augmented minimap training data from your map"
+description: "Use dataset_generator.py to sample, augment, and save minimap crops from your game map, producing a labels.txt file ready for train.py."
+---
+
+`dataset_generator.py` builds a synthetic training dataset by repeatedly sampling random crops from your full game map and applying realistic augmentations that simulate what the in-game minimap actually looks like. The result is a `train_data/` directory of minimap crop images and a `labels.txt` file that maps each image to a normalized map position. Feed these directly to `train.py`.
+
+<Note>
+The generated images simulate minimap crops at various zoom levels: each sample uses a random crop size between 120–180 pixels, all rescaled to 180×180. This teaches the model to handle different zoom configurations without separate training runs.
+</Note>
+
+## How it works
+
+<Steps>
+  <Step title="Load the full game map">
+    The script reads `big_map.png` (or the path you pass to `big_map_path`) and extracts a valid-area mask from the alpha channel (for PNG with transparency) or by detecting the background color.
+  </Step>
+  <Step title="Sample a random crop position">
+    A random center point is chosen on the map. The crop size for this sample is a random integer between 120 and 180 pixels. The script checks that at least 98% of the crop area falls inside the valid map region — crops that clip outside the map boundary are discarded and resampled.
+  </Step>
+  <Step title="Filter low-texture crops">
+    Crops with a grayscale standard deviation below 5.0, or fewer than 20 edge pixels (Canny), are discarded. This avoids training on featureless regions like open water or empty terrain that provide no useful signal.
+  </Step>
+  <Step title="Resize to target size">
+    The accepted crop is resized to 180×180 pixels using bilinear interpolation.
+  </Step>
+  <Step title="Apply augmentations">
+    Two augmentations are each applied with 50% probability per sample:
+
+    - **Radar fan noise** — a semi-transparent white sector is blended onto the crop (alpha 15–40%), simulating the vision cone that appears on in-game minimaps. The angle and sweep (45–120°) are randomized.
+    - **UI icon overlays** — if a `noise_icons/` directory exists, 0–5 PNG icons are randomly scaled and pasted onto the crop with alpha compositing, simulating HUD clutter.
+  </Step>
+  <Step title="Apply the donut mask">
+    A circular mask is applied: the outer radius is 90px (the full circular minimap area), and the inner radius is 15px (zeroed out to remove the player arrow at the center). Everything outside the circle and inside the blind spot is set to black.
+  </Step>
+  <Step title="Optional Gaussian blur">
+    A 3×3 Gaussian blur is applied with 50% probability to simulate slight minimap softness.
+  </Step>
+  <Step title="Save the image and label">
+    The crop is saved as `train_data/img_N.jpg`. The center point used for the crop is divided by the map width and height to produce normalized coordinates, which are appended to `labels.txt` as `image_path,norm_x,norm_y`.
+  </Step>
+</Steps>
+
+## Key parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `big_map_path` | `"big_map.png"` | Path to your full game map image. |
+| `num_samples` | `30000` | Number of training images to generate. |
+| `target_size` | `180` | Output image size in pixels (fixed). |
+| `current_crop_size` | 120–180 (random) | Crop size sampled per image to simulate zoom variation. |
+
+## Running the script
+
+```bash
+python dataset_generator.py
+```
+
+Output:
+
+- `train_data/img_0.jpg` through `train_data/img_N.jpg` — augmented minimap crops
+- `labels.txt` — one line per image: `train_data/img_N.jpg,norm_x,norm_y`
+
+Progress is printed every 1,000 samples.
+
+## UI icon augmentation
+
+Place real PNG icons from your game (with transparency, i.e. an alpha channel) into a `noise_icons/` directory next to the script. The generator will randomly overlay them on crops to train the model to ignore HUD elements.
+
+```
+noise_icons/
+  enemy_marker.png
+  objective_icon.png
+  waypoint.png
+  ...
+```
+
+<Tip>
+For best results, use at least 20,000 samples. With icons in `noise_icons/`, the model becomes much more robust to HUD elements that partially obscure the minimap.
+</Tip>
+
+## Donut mask explained
+
+Real in-game minimaps are circular, not square, and display a small player arrow at the center that would confuse a position regression model. The donut mask enforces both constraints during training:
+
+- **Outer circle** (radius 90px): removes the square corners of the crop so the model only trains on the circular minimap area.
+- **Inner circle** (radius 15px): zeros out the center blind spot where the player arrow sits.
+
+This means the model never sees corner pixels or the player arrow during training, which matches exactly what it sees at inference time.

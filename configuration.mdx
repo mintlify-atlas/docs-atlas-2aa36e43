@@ -1,0 +1,87 @@
+---
+title: "config.json settings reference for Game Map Tracker"
+description: "Complete reference for every config.json key — minimap capture coordinates, overlay window size, SIFT matching thresholds, and AI inference settings."
+---
+
+`config.json` is the single configuration file for Game Map Tracker. It is loaded by `config.py` at startup using `load_config()`, which merges your settings with the built-in defaults — so you only need to include the keys you want to override.
+
+<Note>
+  If `config.json` does not exist, `config.py` generates it automatically from the default values. If any key is missing from your file, the default for that key is used instead. You will never get a `KeyError` from a missing config field.
+</Note>
+
+<Warning>
+  Changes to `config.json` are read only at startup. If you edit the file while the tracker is running, restart the tracker for the changes to take effect.
+</Warning>
+
+## General settings
+
+These settings apply to both SIFT and AI tracking modes.
+
+| Key | Default | Description |
+|---|---|---|
+| `MINIMAP` | `{"top": 292, "left": 1853, "width": 150, "height": 150}` | Screen coordinates of the minimap capture region. Set automatically by `selector.py`. |
+| `WINDOW_GEOMETRY` | `"400x400+1500+100"` | Overlay window size and position in `WxH+X+Y` format. |
+| `VIEW_SIZE` | `400` | Pixel size of the viewport square rendered in the overlay. |
+| `LOGIC_MAP_PATH` | `"big_map.png"` | Path to the clean map image used for feature matching. |
+| `DISPLAY_MAP_PATH` | `"big_map-1.png"` | Path to the annotated map image shown in the overlay. |
+| `MAX_LOST_FRAMES` | `50` | SIFT mode only: number of frames to hold the last known position before the tracker gives up. |
+
+## SIFT mode settings
+
+These settings control the SIFT-based tracker in `main_sift.py`.
+
+| Key | Default | Description |
+|---|---|---|
+| `SIFT_REFRESH_RATE` | `50` | Milliseconds between tracker updates. Lower values increase CPU usage. |
+| `SIFT_CLAHE_LIMIT` | `3.0` | CLAHE clip limit for contrast enhancement applied to both the map and minimap before matching. |
+| `SIFT_MATCH_RATIO` | `0.9` | Lowe's ratio test threshold. Lower values are stricter and reject more matches. |
+| `SIFT_MIN_MATCH_COUNT` | `5` | Minimum number of good matches required to accept a localization result. |
+| `SIFT_RANSAC_THRESHOLD` | `8.0` | Maximum pixel reprojection error allowed by RANSAC when computing the homography. |
+
+## AI mode settings
+
+These settings control the AI-based tracker in `main_ai.py`.
+
+| Key | Default | Description |
+|---|---|---|
+| `AI_REFRESH_RATE` | `200` | Milliseconds between AI inference cycles in the background worker thread. |
+| `AI_CONFIDENCE_THRESHOLD` | `0.6` | Minimum per-keypoint confidence score (0–1) to include a match. |
+| `AI_MIN_MATCH_COUNT` | `6` | Minimum number of confident keypoint matches required to accept a localization result. |
+| `AI_RANSAC_THRESHOLD` | `8.0` | RANSAC reprojection threshold in pixels when computing the homography. |
+| `AI_SCAN_SIZE` | `1600` | Patch size used during full-map radar scan when local tracking is lost. |
+| `AI_SCAN_STEP` | `1400` | Step size between radar scan patches. Smaller values are more thorough but slower. |
+| `AI_TRACK_RADIUS` | `500` | Pixel radius around the last known position used for local search during normal tracking. |
+
+## Complete example config.json
+
+This is a complete `config.json` using the default values from `config.py`:
+
+```json
+{
+    "MINIMAP": {
+        "top": 292,
+        "left": 1853,
+        "width": 150,
+        "height": 150
+    },
+    "WINDOW_GEOMETRY": "400x400+1500+100",
+    "VIEW_SIZE": 400,
+    "LOGIC_MAP_PATH": "big_map.png",
+    "DISPLAY_MAP_PATH": "big_map-1.png",
+    "MAX_LOST_FRAMES": 50,
+
+    "SIFT_REFRESH_RATE": 50,
+    "SIFT_CLAHE_LIMIT": 3.0,
+    "SIFT_MATCH_RATIO": 0.9,
+    "SIFT_MIN_MATCH_COUNT": 5,
+    "SIFT_RANSAC_THRESHOLD": 8.0,
+
+    "AI_REFRESH_RATE": 200,
+    "AI_CONFIDENCE_THRESHOLD": 0.6,
+    "AI_MIN_MATCH_COUNT": 6,
+    "AI_RANSAC_THRESHOLD": 8.0,
+    "AI_SCAN_SIZE": 1600,
+    "AI_SCAN_STEP": 1400,
+    "AI_TRACK_RADIUS": 500
+}
+```

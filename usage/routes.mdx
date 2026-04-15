@@ -1,0 +1,81 @@
+---
+title: 'Create and display route waypoints on the map overlay'
+description: 'How to create JSON route files, organize them by category, enable them in the AI mode overlay, and track visited waypoints automatically.'
+---
+
+Routes are sequences of waypoints stored as JSON files that the AI mode overlay draws on top of your map as colored lines and dots. They are designed to help you follow farming paths, track resource locations, or mark any sequence of points you want to visit. As you walk near each waypoint, it is automatically marked as visited and turns black, so you can see your progress at a glance.
+
+<Note>
+  Routes are only available in AI mode (`main_ai.py`). They are not shown in SIFT mode.
+</Note>
+
+## Route file structure
+
+Place your route files inside a `routes/` directory next to the tracker scripts. Routes are organized into three category subfolders that map to the dropdown menus in the overlay:
+
+```text
+routes/
+├── zhiwu/          # Plants — shown in the "Plants" dropdown
+├── diquluxian/     # Path routes — shown in the "Routes" dropdown
+└── qita/           # Other markers — shown in the "Other" dropdown
+```
+
+Each JSON file inside a category folder is one route. The filename (without the `.json` extension) becomes the display name shown in the overlay menu. Missing category folders are created automatically when the tracker starts.
+
+## Route JSON format
+
+Each route file must contain a `points` array. Each point requires `x` and `y` pixel coordinates corresponding to positions on your logic map. The optional `loop` field connects the last waypoint back to the first.
+
+```json
+{
+  "points": [
+    {"x": 1234, "y": 567},
+    {"x": 1300, "y": 600},
+    {"x": 1380, "y": 540}
+  ],
+  "loop": false
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `points` | array | Yes | Ordered list of waypoints with `x` and `y` pixel coordinates |
+| `points[].x` | number | Yes | X pixel coordinate on the logic map |
+| `points[].y` | number | Yes | Y pixel coordinate on the logic map |
+| `points[].visited` | boolean | No | Set to `true` by the tracker when you walk within 20 pixels of the point |
+| `loop` | boolean | No | If `true`, a line is drawn from the last point back to the first |
+
+## Enabling routes in the overlay
+
+<Steps>
+  <Step title="Open the category dropdown">
+    In the AI mode overlay menu bar, click the dropdown for the category your route belongs to — **Plants**, **Routes**, or **Other**.
+  </Step>
+  <Step title="Check the route name">
+    Each route file in that category appears as a checkbox item labeled with its filename. Check the box to make the route visible on the overlay.
+  </Step>
+  <Step title="Uncheck to hide">
+    Uncheck the box at any time to hide the route. Visited state is preserved while the route is hidden.
+  </Step>
+</Steps>
+
+## Visual representation
+
+Routes are drawn directly on the map crop in the overlay using the following conventions:
+
+| Visual element | Meaning |
+|---|---|
+| Colored line | Connects waypoints in order. Each route gets a distinct color cycling through green, orange, cyan, magenta, and blue. |
+| Red dot | Unvisited waypoint — you have not walked near this point yet |
+| Black dot | Visited waypoint — you walked within 20 pixels of this point |
+| Closing line | Drawn when `loop: true`, connecting the last point back to the first |
+
+Waypoints are marked visited automatically and permanently during the tracking session. Once a point is marked visited, it stays black even if you move away.
+
+## Route visibility sync
+
+Route checkbox states are shared between the main overlay and the manual relocation map selector window. Enabling or disabling a route in either window immediately updates the other. This lets you preview all route waypoints on the full map before resuming tracking after a relocation.
+
+<Tip>
+  Use the manual relocation map to preview your routes zoomed out before starting a run. You can enable routes, inspect the full path, then double-click your starting position to begin tracking.
+</Tip>
